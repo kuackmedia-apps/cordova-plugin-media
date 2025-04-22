@@ -24,6 +24,7 @@
 #define HTTP_SCHEME_PREFIX @"http://"
 #define HTTPS_SCHEME_PREFIX @"https://"
 #define CDVFILE_PREFIX @"cdvfile://"
+#define FILE_PREFIX @"file://"
 
 @implementation CDVSound
 
@@ -70,6 +71,9 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
             resourceURL = [NSURL URLWithString:resourcePath];
         }
     } else {
+        if ([resourcePath hasPrefix:FILE_PREFIX]) { // Support file scheme
+            resourcePath = [resourcePath substringFromIndex:[FILE_PREFIX length]];
+        }
         // if resourcePath is not from FileSystem put in tmp dir, else attempt to use provided resource path
         NSString* tmpPath = [NSTemporaryDirectory()stringByStandardizingPath];
         BOOL isTmp = [resourcePath rangeOfString:tmpPath].location != NSNotFound;
@@ -89,6 +93,67 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
     return resourceURL;
 }
 
+- (NSString*)getCdvCustomSchemeAssetPrefix {
+    NSDictionary* settings = self.commandDelegate.settings;
+    NSString *scheme = [settings objectForKey:[@"scheme" lowercaseString]];
+    // If scheme is file or nil, then default to file scheme
+    Boolean isCdvFileScheme = [scheme isEqualToString: @"file"] || scheme == nil;
+    NSString *hostname = @"";
+
+    if (!isCdvFileScheme) {
+        if (scheme == nil || [WKWebView handlesURLScheme:scheme]) {
+            scheme = @"app";
+        }
+
+        hostname = [settings objectForKey:[@"hostname" lowercaseString]];
+        if(hostname == nil){
+            hostname = @"localhost";
+        }
+
+        return [NSString stringWithFormat:@"%@://%@/", scheme, hostname];
+    }
+
+    return nil;
+}
+
+- (Boolean)isCdvCustomSchemeUrl:(NSString*)resourcePath
+{
+    NSString *assetUrl = [self getCdvCustomSchemeAssetPrefix];
+
+    if (assetUrl != nil) {
+        return [resourcePath hasPrefix:assetUrl];
+    }
+
+    return false;
+}
+
+// Attempts to find the file path in the "www" or "LocalFileSystem.TEMPORARY" directory.
+// Used for "file://" & "custom-scheme://hostname/" schemes and leading "/" directory paths.
+- (NSString*)attemptFindFilePath:(NSString*)resourcePath prefix:(NSString*)prefix
+{
+    resourcePath = [resourcePath substringFromIndex:[prefix length]];
+
+    NSString *filePath = [self.commandDelegate pathForResource:resourcePath];
+
+    if (filePath == nil) {
+        // see if this exists in the documents/temp directory from a previous recording
+        NSString* testPath = [NSString stringWithFormat:@"%@/%@", [NSTemporaryDirectory()stringByStandardizingPath], resourcePath];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:testPath]) {
+            // inefficient as existence will be checked again below but only way to determine if file exists from previous recording
+            filePath = testPath;
+            NSLog(@"Will attempt to use file resource from LocalFileSystem.TEMPORARY directory");
+        } else {
+            // attempt to use path provided
+            filePath = resourcePath;
+            NSLog(@"Will attempt to use file resource '%@'", filePath);
+        }
+    } else {
+        NSLog(@"Found resource '%@' in the web folder.", filePath);
+    }
+
+    return filePath;
+}
+
 // Maps a url for a resource path for playing
 // "Naked" resource paths are assumed to be from the www folder as its base
 - (NSURL*)urlForPlaying:(NSString*)resourcePath
@@ -96,8 +161,15 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
     NSURL* resourceURL = nil;
     NSString* filePath = nil;
 
-    // first try to find HTTP:// or Documents:// resources
-
+    // The order of checking if url path:
+    // 1. http:// or https://
+    // 2. documents://
+    // 3. cdvfile://
+    // 4. file://
+    // 5. custom app scheme+hostname (e.g. app://localhost/)
+    // 6. starts with a "/"
+    //
+    // For use case 4-6, it will attempt to find file path in "www" or "LocalFileSystem.TEMPORARY" directory
     if ([resourcePath hasPrefix:HTTP_SCHEME_PREFIX] || [resourcePath hasPrefix:HTTPS_SCHEME_PREFIX]) {
         // if it is a http url, use it
         NSLog(@"Will use resource '%@' from the Internet.", resourcePath);
@@ -113,25 +185,15 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
         if (filePath == nil) {
             resourceURL = [NSURL URLWithString:resourcePath];
         }
-    } else {
-        // attempt to find file path in www directory or LocalFileSystem.TEMPORARY directory
-        filePath = [self.commandDelegate pathForResource:resourcePath];
-        if (filePath == nil) {
-            // see if this exists in the documents/temp directory from a previous recording
-            NSString* testPath = [NSString stringWithFormat:@"%@/%@", [NSTemporaryDirectory()stringByStandardizingPath], resourcePath];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:testPath]) {
-                // inefficient as existence will be checked again below but only way to determine if file exists from previous recording
-                filePath = testPath;
-                NSLog(@"Will attempt to use file resource from LocalFileSystem.TEMPORARY directory");
-            } else {
-                // attempt to use path provided
-                filePath = resourcePath;
-                NSLog(@"Will attempt to use file resource '%@'", filePath);
-            }
-        } else {
-            NSLog(@"Found resource '%@' in the web folder.", filePath);
-        }
+    } else if ([resourcePath hasPrefix:FILE_PREFIX]) {
+        filePath = [self attemptFindFilePath:resourcePath prefix:FILE_PREFIX];
+    } else if ([self isCdvCustomSchemeUrl:resourcePath]) {
+        NSString *assetUrl = [self getCdvCustomSchemeAssetPrefix];
+        filePath = [self attemptFindFilePath:resourcePath prefix: assetUrl];
+    } else if ([resourcePath hasPrefix:@"/"]) {
+        filePath = [self attemptFindFilePath:resourcePath prefix:@"/"];
     }
+
     // if the resourcePath resolved to a file path, check that file exists
     if (filePath != nil) {
         // create resourceURL
@@ -385,7 +447,7 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
                     CMTime time = avPlayer.currentItem.asset.duration;
                     duration = CMTimeGetSeconds(time);
                     if (isnan(duration)) {
-                        NSLog(@"Duration is infifnite, setting it to -1");
+                        NSLog(@"Duration is infinite, setting it to -1");
                         duration = -1;
                     }
 
@@ -395,9 +457,7 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
                         [avPlayer setRate:customRate];
                     } else {
                         NSLog(@"Playing stream with AVPlayer & default rate");
-                        // [avPlayer play];
-                        avPlayer.automaticallyWaitsToMinimizeStalling = false;
-                        [avPlayer playImmediatelyAtRate:1];
+                        [avPlayer play];
                     }
 
                 } else {
@@ -583,6 +643,7 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
 
         BOOL isPlaying = (avPlayer.rate > 0 && !avPlayer.error);
         BOOL isReadyToSeek = (avPlayer.status == AVPlayerStatusReadyToPlay) && (avPlayer.currentItem.status == AVPlayerItemStatusReadyToPlay);
+        float currentPlaybackRate = avPlayer.rate;
 
         // CB-10535:
         // When dealing with remote files, we can get into a situation where we start playing before AVPlayer has had the time to buffer the file to be played.
@@ -592,7 +653,11 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
                  toleranceBefore: kCMTimeZero
                   toleranceAfter: kCMTimeZero
                completionHandler: ^(BOOL finished) {
-                   if (isPlaying) [avPlayer play];
+                   if (isPlaying) {
+                       [avPlayer play];
+                       // [avPlayer play] sets the rate to 1, so we need to set it again after seeking
+                       [avPlayer setRate:currentPlaybackRate];
+                   };
                }];
         } else {
             NSString* errMsg = @"AVPlayerItem cannot service a seek request with a completion handler until its status is AVPlayerItemStatusReadyToPlay.";
@@ -601,6 +666,7 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
         }
     }
 }
+
 
 - (void)release:(CDVInvokedUrlCommand*)command
 {
@@ -622,6 +688,7 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
                 avPlayer = nil;
             }
             if (! keepAvAudioSessionAlwaysActive && self.avSession && ! [self isPlayingOrRecording]) {
+                [self.avSession setCategory:AVAudioSessionCategorySoloAmbient error:nil];
                 [self.avSession setActive:NO error:nil];
                 self.avSession = nil;
             }
@@ -646,6 +713,10 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
     if (avPlayer) {
        CMTime time = [avPlayer currentTime];
        position = CMTimeGetSeconds(time);
+    }
+
+    if (isnan(position)){
+        position = -1;
     }
 
     CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDouble:position];
@@ -834,13 +905,17 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
 -(void)itemStalledPlaying:(NSNotification *) notification {
     // Will be called when playback stalls due to buffer empty
     NSLog(@"Stalled playback");
+    NSString* errMsg = @"stalled_playback";
+    NSString* mediaId = self.currMediaId;
+    [self onStatus:MEDIA_ERROR mediaId:mediaId param:
+     [self createAbortError:errMsg]];
 }
 
 - (void)onMemoryWarning
 {
     /* https://issues.apache.org/jira/browse/CB-11513 */
     NSMutableArray* keysToRemove = [[NSMutableArray alloc] init];
-    
+
     for(id key in [self soundCache]) {
         CDVAudioFile* audioFile = [[self soundCache] objectForKey:key];
         if (audioFile != nil) {
@@ -852,9 +927,9 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
             }
         }
     }
-    
+
     [[self soundCache] removeObjectsForKeys:keysToRemove];
-    
+
     // [[self soundCache] removeAllObjects];
     // [self setSoundCache:nil];
     [self setAvSession:nil];
@@ -964,7 +1039,7 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
 
 - (void)onStatus:(CDVMediaMsg)what mediaId:(NSString*)mediaId param:(NSObject*)param
 {
-    if (self.statusCallbackId!=nil) { //new way, android,windows compatible
+    if (self.statusCallbackId!=nil) { //new way, android compatible
         NSMutableDictionary* status=[NSMutableDictionary dictionary];
         status[@"msgType"] = @(what);
         //in the error case contains a dict with "code" and "message"
