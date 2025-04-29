@@ -17,6 +17,7 @@
 
 #import "CDVSound.h"
 #import "CDVFile.h"
+#import "CDVAudioSessionManager.h"
 #import <AVFoundation/AVFoundation.h>
 #include <math.h>
 
@@ -35,12 +36,14 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
 {
     NSDictionary* settings = self.commandDelegate.settings;
     keepAvAudioSessionAlwaysActive = [[settings objectForKey:[@"KeepAVAudioSessionAlwaysActive" lowercaseString]] boolValue];
+
+    // Si queremos mantener la sesión de audio siempre activa, usamos el gestor centralizado
     if (keepAvAudioSessionAlwaysActive) {
         if ([self hasAudioSession]) {
-            NSError* error = nil;
-            if(![self.avSession setActive:YES error:&error]) {
-                NSLog(@"Unable to activate session: %@", [error localizedFailureReason]);
-            }
+            // Usar el gestor centralizado
+            CDVAudioSessionManager *manager = [CDVAudioSessionManager sharedInstance];
+            [manager setupAudioSessionForPlayback];
+            [manager activateAudioSession];
         }
     }
 }
@@ -364,18 +367,24 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
             // get the audioSession and set the category to allow Playing when device is locked or ring/silent switch engaged
             if ([self hasAudioSession]) {
                 NSError* __autoreleasing err = nil;
-                NSNumber* playAudioWhenScreenIsLocked = [options objectForKey:@"playAudioWhenScreenIsLocked"];
-                BOOL bPlayAudioWhenScreenIsLocked = YES;
-                if (playAudioWhenScreenIsLocked != nil) {
-                    bPlayAudioWhenScreenIsLocked = [playAudioWhenScreenIsLocked boolValue];
+
+                // Usar el gestor centralizado para configurar la sesión de audio
+                CDVAudioSessionManager *manager = [CDVAudioSessionManager sharedInstance];
+                BOOL success = [manager setupAudioSessionForPlayback];
+                if (!success) {
+                    err = [manager lastError];
+                    NSLog(@"Unable to configure audio session: %@", [err localizedFailureReason]);
+                    bError = YES;
                 }
 
-                NSString* sessionCategory = bPlayAudioWhenScreenIsLocked ? AVAudioSessionCategoryPlayback : AVAudioSessionCategorySoloAmbient;
-                [self.avSession setCategory:sessionCategory error:&err];
-                if (![self.avSession setActive:YES error:&err]) {
-                    // other audio with higher priority that does not allow mixing could cause this to fail
-                    NSLog(@"Unable to play audio: %@", [err localizedFailureReason]);
-                    bError = YES;
+                // Activar la sesión
+                if (!bError) {
+                    success = [manager activateAudioSession];
+                    if (!success) {
+                        err = [manager lastError];
+                        NSLog(@"Unable to activate audio session: %@", [err localizedFailureReason]);
+                        bError = YES;
+                    }
                 }
             }
             if (!bError) {
@@ -840,7 +849,7 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
 {
     /* https://issues.apache.org/jira/browse/CB-11513 */
     NSMutableArray* keysToRemove = [[NSMutableArray alloc] init];
-    
+
     for(id key in [self soundCache]) {
         CDVAudioFile* audioFile = [[self soundCache] objectForKey:key];
         if (audioFile != nil) {
@@ -852,9 +861,9 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
             }
         }
     }
-    
+
     [[self soundCache] removeObjectsForKeys:keysToRemove];
-    
+
     // [[self soundCache] removeAllObjects];
     // [self setSoundCache:nil];
     [self setAvSession:nil];
