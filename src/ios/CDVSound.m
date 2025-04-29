@@ -37,10 +37,22 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
     keepAvAudioSessionAlwaysActive = [[settings objectForKey:[@"KeepAVAudioSessionAlwaysActive" lowercaseString]] boolValue];
     if (keepAvAudioSessionAlwaysActive) {
         if ([self hasAudioSession]) {
-            NSError* error = nil;
-            if(![self.avSession setActive:YES error:&error]) {
-                NSLog(@"Unable to activate session: %@", [error localizedFailureReason]);
-            }
+           NSError* error = nil;
+           // Establecer la política de compartición de ruta para AirPlay (iOS 13+)
+           if (@available(iOS 13.0, *)) {
+               [self.avSession setRouteSharePolicy:AVAudioSessionRouteSharingPolicyLongFormAudio error:&error];
+               if (error) {
+                   NSLog(@"Error setting route sharing policy: %@", [error localizedFailureReason]);
+                   error = nil;
+               }
+           }
+
+           // Activar la sesión si está configurado para mantenerla siempre activa
+           if (keepAvAudioSessionAlwaysActive) {
+               if(![self.avSession setActive:YES error:&error]) {
+                   NSLog(@"Unable to activate session: %@", [error localizedFailureReason]);
+               }
+           }
         }
     }
 }
@@ -840,7 +852,7 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
 {
     /* https://issues.apache.org/jira/browse/CB-11513 */
     NSMutableArray* keysToRemove = [[NSMutableArray alloc] init];
-    
+
     for(id key in [self soundCache]) {
         CDVAudioFile* audioFile = [[self soundCache] objectForKey:key];
         if (audioFile != nil) {
@@ -852,9 +864,9 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
             }
         }
     }
-    
+
     [[self soundCache] removeObjectsForKeys:keysToRemove];
-    
+
     // [[self soundCache] removeAllObjects];
     // [self setSoundCache:nil];
     [self setAvSession:nil];
