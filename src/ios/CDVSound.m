@@ -371,7 +371,15 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
                 }
 
                 NSString* sessionCategory = bPlayAudioWhenScreenIsLocked ? AVAudioSessionCategoryPlayback : AVAudioSessionCategorySoloAmbient;
-                [self.avSession setCategory:sessionCategory error:&err];
+
+                // Configurar opciones para AirPlay
+                AVAudioSessionCategoryOptions categoryOptions = AVAudioSessionCategoryOptionMixWithOthers |
+                                                               AVAudioSessionCategoryOptionAllowAirPlay |
+                                                               AVAudioSessionCategoryOptionAllowBluetooth |
+                                                               AVAudioSessionCategoryOptionAllowBluetoothA2DP;
+
+                [self.avSession setCategory:sessionCategory withOptions:categoryOptions error:&err];
+
                 if (![self.avSession setActive:YES error:&err]) {
                     // other audio with higher priority that does not allow mixing could cause this to fail
                     NSLog(@"Unable to play audio: %@", [err localizedFailureReason]);
@@ -678,7 +686,12 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
             // get the audioSession and set the category to allow recording when device is locked or ring/silent switch engaged
             if ([weakSelf hasAudioSession]) {
                 if (![weakSelf.avSession.category isEqualToString:AVAudioSessionCategoryPlayAndRecord]) {
-                    [weakSelf.avSession setCategory:AVAudioSessionCategoryRecord error:nil];
+                    AVAudioSessionCategoryOptions recordOptions = AVAudioSessionCategoryOptionMixWithOthers |
+                                                                 AVAudioSessionCategoryOptionAllowAirPlay |
+                                                                 AVAudioSessionCategoryOptionAllowBluetooth |
+                                                                 AVAudioSessionCategoryOptionAllowBluetoothA2DP;
+
+                    [weakSelf.avSession setCategory:AVAudioSessionCategoryPlayAndRecord withOptions:recordOptions error:nil];
                 }
 
                 if (![weakSelf.avSession setActive:YES error:&error]) {
@@ -840,7 +853,7 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
 {
     /* https://issues.apache.org/jira/browse/CB-11513 */
     NSMutableArray* keysToRemove = [[NSMutableArray alloc] init];
-    
+
     for(id key in [self soundCache]) {
         CDVAudioFile* audioFile = [[self soundCache] objectForKey:key];
         if (audioFile != nil) {
@@ -852,9 +865,9 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
             }
         }
     }
-    
+
     [[self soundCache] removeObjectsForKeys:keysToRemove];
-    
+
     // [[self soundCache] removeAllObjects];
     // [self setSoundCache:nil];
     [self setAvSession:nil];
