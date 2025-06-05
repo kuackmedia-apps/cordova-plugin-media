@@ -209,17 +209,12 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
     BOOL bSession = YES;
 
     if (!self.avSession) {
-        NSError* error = nil;
-
         self.avSession = [AVAudioSession sharedInstance];
-        if (error) {
-            // is not fatal if can't get AVAudioSession , just log the error
-            NSLog(@"error creating audio session: %@", [[error userInfo] description]);
-            self.avSession = nil;
+        if (!self.avSession) {
             bSession = NO;
         }
     }
-    return bSession;
+   return bSession;
 }
 
 // helper function to create a error object string
@@ -840,7 +835,7 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
 {
     /* https://issues.apache.org/jira/browse/CB-11513 */
     NSMutableArray* keysToRemove = [[NSMutableArray alloc] init];
-    
+
     for(id key in [self soundCache]) {
         CDVAudioFile* audioFile = [[self soundCache] objectForKey:key];
         if (audioFile != nil) {
@@ -852,9 +847,9 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
             }
         }
     }
-    
+
     [[self soundCache] removeObjectsForKeys:keysToRemove];
-    
+
     // [[self soundCache] removeAllObjects];
     // [self setSoundCache:nil];
     [self setAvSession:nil];
