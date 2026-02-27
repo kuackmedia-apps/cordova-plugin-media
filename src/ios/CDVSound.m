@@ -260,6 +260,9 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
             // Pass the AVPlayerItem to a new player
             avPlayer = [[AVPlayer alloc] initWithPlayerItem:playerItem];
 
+            // Audio-only AirPlay: disable external playback to prevent screen mirroring
+            avPlayer.allowsExternalPlayback = NO;
+
             // Avoid excessive buffering so streaming media can play instantly on iOS
             // Removes preplay delay on ios 10+, makes consistent with ios9 behaviour
             if ([NSProcessInfo.processInfo isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){10,0,0}]) {
@@ -366,7 +369,13 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
                 }
 
                 NSString* sessionCategory = bPlayAudioWhenScreenIsLocked ? AVAudioSessionCategoryPlayback : AVAudioSessionCategorySoloAmbient;
-                [self.avSession setCategory:sessionCategory error:&err];
+                AVAudioSessionCategoryOptions categoryOptions = 0;
+                if (bPlayAudioWhenScreenIsLocked) {
+                    categoryOptions = AVAudioSessionCategoryOptionAllowAirPlay
+                                   | AVAudioSessionCategoryOptionAllowBluetooth
+                                   | AVAudioSessionCategoryOptionAllowBluetoothA2DP;
+                }
+                [self.avSession setCategory:sessionCategory withOptions:categoryOptions error:&err];
                 if (![self.avSession setActive:YES error:&err]) {
                     // other audio with higher priority that does not allow mixing could cause this to fail
                     NSLog(@"Unable to play audio: %@", [err localizedFailureReason]);
