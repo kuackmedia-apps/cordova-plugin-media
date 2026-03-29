@@ -370,11 +370,6 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
 
                 NSString* sessionCategory = bPlayAudioWhenScreenIsLocked ? AVAudioSessionCategoryPlayback : AVAudioSessionCategorySoloAmbient;
                 AVAudioSessionCategoryOptions categoryOptions = 0;
-                if (bPlayAudioWhenScreenIsLocked) {
-                    categoryOptions = AVAudioSessionCategoryOptionAllowAirPlay
-                                   | AVAudioSessionCategoryOptionAllowBluetooth
-                                   | AVAudioSessionCategoryOptionAllowBluetoothA2DP;
-                }
                 [self.avSession setCategory:sessionCategory withOptions:categoryOptions error:&err];
                 if (![self.avSession setActive:YES error:&err]) {
                     // other audio with higher priority that does not allow mixing could cause this to fail
