@@ -82,7 +82,7 @@ module.exports = function (context) {
                 applicationTag['android:allowBackup'] = false;
 
                 var activityTag = manifestRoot.application[0].activity[0]['$'];
-                activityTag['android:windowSoftInputMode'] = 'adjustPan';
+                activityTag['android:windowSoftInputMode'] = 'adjustNothing';
                 activityTag['android:exported'] = true;
 
                 var builder = new xml2js.Builder();
