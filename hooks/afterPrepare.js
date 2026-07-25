@@ -37,14 +37,16 @@ module.exports = function (context) {
             if (!obj.hasOwnProperty('ITSAppUsesNonExemptEncryption')) {
                 obj.ITSAppUsesNonExemptEncryption = false;
             }
-            if (!obj.hasOwnProperty('NSLocationAlwaysUsageDescription') || obj.NSLocationAlwaysUsageDescription === '') {
-                obj.NSLocationAlwaysUsageDescription = 'This app requires location access to function properly';
+            // The apps do not use CoreLocation: remove the placeholder strings
+            // baked into the plist by previous prepares (App Review 5.1.1)
+            if (obj.NSLocationAlwaysUsageDescription === 'This app requires location access to function properly') {
+                delete obj.NSLocationAlwaysUsageDescription;
             }
-            if (!obj.hasOwnProperty('NSLocationWhenInUseUsageDescription') || obj.NSLocationWhenInUseUsageDescription === '') {
-                obj.NSLocationWhenInUseUsageDescription = 'This app requires location access to function properly';
+            if (obj.NSLocationWhenInUseUsageDescription === 'This app requires location access to function properly') {
+                delete obj.NSLocationWhenInUseUsageDescription;
             }
-            if (!obj.hasOwnProperty('NSCameraUsageDescription') || obj.NSCameraUsageDescription === '') {
-                obj.NSCameraUsageDescription = 'Camera access is required to to use a photo as an avatar';
+            if (!obj.hasOwnProperty('NSCameraUsageDescription') || obj.NSCameraUsageDescription === '' || obj.NSCameraUsageDescription === 'Camera access is required to to use a photo as an avatar') {
+                obj.NSCameraUsageDescription = 'Camera access is required to scan QR codes and to take a photo for your avatar';
             }
             if (!obj.hasOwnProperty('NSPhotoLibraryUsageDescription') || obj.NSPhotoLibraryUsageDescription === '') {
                 obj.NSPhotoLibraryUsageDescription = 'Photo library access is required to use an image as an avatar';
