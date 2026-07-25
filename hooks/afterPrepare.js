@@ -46,13 +46,21 @@ module.exports = function (context) {
                 delete obj.NSLocationWhenInUseUsageDescription;
             }
             if (!obj.hasOwnProperty('NSCameraUsageDescription') || obj.NSCameraUsageDescription === '' || obj.NSCameraUsageDescription === 'Camera access is required to to use a photo as an avatar') {
-                obj.NSCameraUsageDescription = 'Camera access is required to scan QR codes and to take a photo for your avatar';
+                obj.NSCameraUsageDescription = 'The camera is used to scan QR codes.';
             }
-            if (!obj.hasOwnProperty('NSPhotoLibraryUsageDescription') || obj.NSPhotoLibraryUsageDescription === '') {
-                obj.NSPhotoLibraryUsageDescription = 'Photo library access is required to use an image as an avatar';
+            // Replace the generic photo library strings baked in by previous prepares
+            // with the avatar-specific ones (App Review 5.1.1)
+            var photoLibraryLegacyValues = [
+                '',
+                'Photo library access is required to use an image as an avatar',
+                'Photo library write-access is required to save an avatar',
+                'This app requires photo library access to function properly.'
+            ];
+            if (!obj.hasOwnProperty('NSPhotoLibraryUsageDescription') || photoLibraryLegacyValues.indexOf(obj.NSPhotoLibraryUsageDescription) !== -1) {
+                obj.NSPhotoLibraryUsageDescription = 'Photo library access is required to choose an image to use as your avatar.';
             }
-            if (!obj.hasOwnProperty('NSPhotoLibraryAddUsageDescription') || obj.NSPhotoLibraryAddUsageDescription === '') {
-                obj.NSPhotoLibraryAddUsageDescription = 'Photo library write-access is required to save an avatar';
+            if (!obj.hasOwnProperty('NSPhotoLibraryAddUsageDescription') || photoLibraryLegacyValues.indexOf(obj.NSPhotoLibraryAddUsageDescription) !== -1) {
+                obj.NSPhotoLibraryAddUsageDescription = 'Photo library write-access is required to save the image you choose as your avatar.';
             }
             if (!obj.hasOwnProperty('NSBluetoothPeripheralUsageDescription') || obj.NSBluetoothPeripheralUsageDescription === '') {
                 obj.NSBluetoothPeripheralUsageDescription = 'This app uses Bluetooth to discover nearby Cast devices';
